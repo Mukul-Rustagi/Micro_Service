@@ -29,9 +29,9 @@ async function cleanupExpiredLinks() {
             console.log(`- Expiration Time: ${expirationTime}`);
             console.log(`- Current Time: ${now}`);
             
+            // Delete both the shortId and link keys
             await redis.del(key);
             await redis.del(`link:${link.longURL}`);
-            await linkModel.deleteByShortId(link.shortId);
             deletedCount++;
           }
         }
@@ -40,10 +40,11 @@ async function cleanupExpiredLinks() {
       }
     }
     
-    console.log(`[${new Date().toISOString()}] Cleanup completed:`);
-    console.log(`- Checked ${checkedCount} links`);
-    console.log(`- Deleted ${deletedCount} expired links`);
-    console.log(`- Next cleanup scheduled in 6 hours`);
+    if (deletedCount > 0) {
+      console.log(`[${new Date().toISOString()}] Cleanup completed:`);
+      console.log(`- Checked ${checkedCount} links`);
+      console.log(`- Deleted ${deletedCount} expired links`);
+    }
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in cleanup task:`, error.message);
   }

@@ -3,6 +3,9 @@ const redis = require("../config/db");
 
 class LinkModel {
   async create(linkData) {
+    // First, check and delete any expired links
+    await this.deleteExpiredLinks();
+
     const shortId = nanoid(8);
     const link = {
       shortId,
@@ -20,9 +23,8 @@ class LinkModel {
     const secondsUntilExpiration = Math.max(3600, Math.floor((expirationTime - new Date()) / 1000));
 
     // Store in Redis with expiration
-    const redisData = JSON.stringify(link);
-    await redis.set(`shortId:${shortId}`, redisData, 'EX', secondsUntilExpiration);
-    await redis.set(`link:${linkData.longURL}`, redisData, 'EX', secondsUntilExpiration);
+    await redis.set(`shortId:${shortId}`, JSON.stringify(link), 'EX', secondsUntilExpiration);
+    await redis.set(`link:${linkData.longURL}`, JSON.stringify(link), 'EX', secondsUntilExpiration);
 
     console.log('Stored in Redis:', {
       shortId: shortId,
@@ -80,30 +82,41 @@ class LinkModel {
   }
 
   async deleteExpiredLinks() {
-    const keys = await redis.keys('shortId:*');
-    const now = new Date();
-    let deletedCount = 0;
-    
-    for (const key of keys) {
-      try {
-        const data = await redis.get(key);
-        if (data) {
-          const link = JSON.parse(data);
-          const expirationTime = new Date(link.bookingStartTime);
-          expirationTime.setMonth(expirationTime.getMonth() + 1);
-          
-          if (now > expirationTime) {
-            await this.deleteByShortId(link.shortId);
-            deletedCount++;
+    try {
+      const keys = await redis.keys('shortId:*');
+      const now = new Date();
+      let deletedCount = 0;
+      
+      for (const key of keys) {
+        try {
+          const data = await redis.get(key);
+          if (data) {
+            const link = JSON.parse(data);
+            const expirationTime = new Date(link.bookingStartTime);
+            expirationTime.setMonth(expirationTime.getMonth() + 1);
+            
+            if (now > expirationTime) {
+              console.log(`Deleting expired link: ${link.shortId}`);
+              console.log(`- Booking Start Time: ${link.bookingStartTime}`);
+              console.log(`- Expiration Time: ${expirationTime}`);
+              console.log(`- Current Time: ${now}`);
+              
+              await redis.del(key);
+              await redis.del(`link:${link.longURL}`);
+              deletedCount++;
+            }
           }
+        } catch (error) {
+          console.error(`Error processing key ${key}:`, error.message);
         }
-      } catch (error) {
-        console.error(`Error processing key ${key}:`, error.message);
       }
+      
+      if (deletedCount > 0) {
+        console.log(`Deleted ${deletedCount} expired links`);
+      }
+    } catch (error) {
+      console.error("Error in deleteExpiredLinks:", error.message);
     }
-    
-    console.log(`Cleanup completed. Deleted ${deletedCount} expired links.`);
-    return deletedCount;
   }
 }
 
