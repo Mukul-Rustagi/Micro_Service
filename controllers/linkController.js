@@ -1,65 +1,103 @@
 const linkModel = require("../models/linkModel");
 const redis = require("../config/db");
-const { calculateExpirationTime, getSecondsUntilExpiration } = require("../utils/linkUtils");
 require("dotenv").config();
 
-exports.createShortDeepLink = async (req, res) => {
+exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null) => {
   try {
-    const { longURL, userType, bookingStartTime } = req.body;
-    console.log("Creating short link for:", longURL);
+    console.log("\n=== Starting createShortDeepLink ===");
+    console.log("Input parameters:", { longURL, userType, bookingStartTime });
     
     if (!longURL || longURL === "") {
-      return res.status(400).json({ error: "URL is required" });
+      console.log("Error: URL is required");
+      throw new Error("URL is required");
     }
 
-    if (!bookingStartTime) {
-      return res.status(400).json({ error: "Booking start time is required" });
-    }
+    // Validate booking time first, before any database operations
+    const now = new Date();
+    console.log("Current time:", now.toISOString());
+    let bookingTime = null;
+    let ttlSeconds;
 
-    // Validate bookingStartTime
-    const bookingTime = new Date(bookingStartTime);
-    if (isNaN(bookingTime.getTime())) {
-      return res.status(400).json({ error: "Invalid booking start time format" });
+    if (bookingStartTime) {
+      console.log("Processing booking start time:", bookingStartTime);
+      bookingTime = new Date(bookingStartTime);
+      if (isNaN(bookingTime.getTime())) {
+        console.log("Error: Invalid booking start time format");
+        throw new Error("Invalid booking start time format");
+      }
+      
+      // If booking time has passed, don't create the link
+      if (bookingTime < now) {
+        console.log("Error: Booking time is in the past", {
+          bookingTime: bookingTime.toISOString(),
+          currentTime: now.toISOString()
+        });
+        throw new Error(`Cannot create link - Booking start time (${bookingStartTime}) is in the past. Current time is ${now.toISOString()}`);
+      }
+
+      // Set TTL to 1 month after booking start time
+      const expirationTime = new Date(bookingTime);
+      expirationTime.setMonth(expirationTime.getMonth() + 1);
+      ttlSeconds = Math.floor((expirationTime - now) / 1000);
+
+      // Ensure TTL is positive
+      if (ttlSeconds <= 0) {
+        console.log("Error: TTL would be negative", {
+          ttlSeconds,
+          bookingTime: bookingTime.toISOString(),
+          currentTime: now.toISOString()
+        });
+        throw new Error(`Cannot create link - Expiration time would be in the past. Booking time: ${bookingStartTime}, Current time: ${now.toISOString()}`);
+      }
+
+      console.log("TTL calculation:", {
+        bookingTime: bookingTime.toISOString(),
+        expirationTime: expirationTime.toISOString(),
+        ttlSeconds,
+        currentTime: now.toISOString()
+      });
+    } else {
+      // If no bookingStartTime, expire after 9 months from now
+      ttlSeconds = 9 * 30 * 24 * 60 * 60; // 9 months in seconds
+      console.log("No booking time provided, using default 9 months TTL:", ttlSeconds);
     }
 
     // Check Redis first
+    console.log("Checking Redis for existing link...");
     const redisKey = `link:${longURL}`;
     const cachedLink = await redis.get(redisKey);
     if (cachedLink) {
       const existingLink = JSON.parse(cachedLink);
       console.log("Existing link found in Redis:", existingLink);
-      const response = {
+      return {
         shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
         deepLink: existingLink.deepLink || null,
         iosLink: existingLink.iosLink || null
       };
-      return res.json(response);
     }
+    console.log("No existing link found in Redis");
 
     // Check database if not in Redis
+    console.log("Checking database for existing link...");
     let existingLink = await linkModel.findByLongUrl(longURL);
     if (existingLink) {
       console.log("Existing link found in DB:", existingLink);
-      // Cache in Redis with expiration
-      const expirationTime = calculateExpirationTime(existingLink);
-      const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
-      
-      await redis.set(redisKey, JSON.stringify(existingLink), 'EX', secondsUntilExpiration);
-      
-      const response = {
+      return {
         shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
         deepLink: existingLink.deepLink || null,
         iosLink: existingLink.iosLink || null
       };
-      return res.json(response);
     }
+    console.log("No existing link found in DB");
 
+    console.log("Creating new link data...");
     let newLinkData = {
       longURL,
       userType,
       bookingStartTime: bookingTime,
       deepLink: null,
-      iosLink: null
+      iosLink: null,
+      createdAt: now
     };
 
     if (userType === "customer" || userType === "supplier") {
@@ -70,27 +108,59 @@ exports.createShortDeepLink = async (req, res) => {
       
       newLinkData.deepLink = deepLink;
       newLinkData.iosLink = deepLink;
+      console.log("Added deep links:", { deepLink, iosLink: deepLink });
     }
 
+    console.log("Creating new link in database...");
     const newLink = await linkModel.create(newLinkData);
-    console.log("New short link created:", newLink);
+    if (!newLink) {
+      console.log("Error: Could not create link");
+      throw new Error("Could not create link");
+    }
+    console.log("New link created successfully:", newLink);
     
-    // Calculate expiration time and cache in Redis
-    const expirationTime = calculateExpirationTime(newLink);
-    const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
+    // Store in Redis with TTL
+    console.log("Storing in Redis with TTL:", ttlSeconds);
+    const linkData = JSON.stringify(newLink);
+    await redis.set(redisKey, linkData, 'EX', ttlSeconds);
+    await redis.set(`shortId:${newLink.shortId}`, linkData, 'EX', ttlSeconds);
+    console.log("Successfully stored in Redis");
     
-    // Cache new link in Redis with expiration
-    await redis.set(redisKey, JSON.stringify(newLink), 'EX', secondsUntilExpiration);
-    
+    const expirationDate = new Date(now.getTime() + (ttlSeconds * 1000));
     const response = {
       shortURL: `${process.env.BASE_URL}/${newLink.shortId}`,
       deepLink: newLink.deepLink || null,
-      iosLink: newLink.iosLink || null
+      iosLink: newLink.iosLink || null,
+      bookingStartTime: bookingTime ? bookingTime.toISOString() : null,
+      expiresAt: expirationDate.toISOString(),
+      ttl: {
+        seconds: ttlSeconds,
+        description: bookingTime ? '1 month after booking start' : '9 months from creation',
+        calculatedFrom: bookingTime ? 'booking start time' : 'creation time'
+      }
     };
-    return res.json(response);
+    console.log("Returning response:", response);
+    console.log("=== End createShortDeepLink ===\n");
+    return response;
   } catch (error) {
     console.error("Error in createShortDeepLink:", error.message);
-    return res.status(500).json({ error: "Server error" });
+    throw error;
+  }
+};
+
+// Route handler that uses the function
+exports.createShortDeepLinkHandler = async (req, res) => {
+  try {
+    console.log("\n=== Starting createShortDeepLinkHandler ===");
+    console.log("Request body:", req.body);
+    const { longURL, userType, bookingStartTime } = req.body;
+    const result = await exports.createShortDeepLink(longURL, userType, bookingStartTime);
+    console.log("Handler response:", result);
+    console.log("=== End createShortDeepLinkHandler ===\n");
+    return res.json(result);
+  } catch (error) {
+    console.error("Error in createShortDeepLinkHandler:", error);
+    return res.status(400).json({ error: error.message });
   }
 };
 
@@ -110,31 +180,11 @@ exports.redirectShortLink = async (req, res) => {
       console.log("Found link in Redis:", link);
     } else {
       link = await linkModel.findByShortId(shortId);
-      if (link) {
-        console.log("Found link in DB:", link);
-        // Calculate expiration time and cache in Redis
-        const expirationTime = calculateExpirationTime(link);
-        const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
-        
-        // Cache in Redis with expiration
-        await redis.set(redisKey, JSON.stringify(link), 'EX', secondsUntilExpiration);
+      if (!link) {
+        console.log("Short link not found:", shortId);
+        return res.status(404).json({ error: "Short link not found or has expired" });
       }
-    }
-
-    if (!link) {
-      console.log("Short link not found:", shortId);
-      return res.status(404).json({ error: "Short link not found" });
-    }
-
-    // Check if link has expired
-    const expirationTime = calculateExpirationTime(link);
-    
-    if (new Date() > expirationTime) {
-      console.log("Link has expired:", shortId);
-      // Delete from Redis and database
-      await redis.del(redisKey);
-      await linkModel.deleteByShortId(shortId);
-      return res.status(404).json({ error: "Link has expired" });
+      console.log("Found link in DB:", link);
     }
 
     const isAndroid = /android/i.test(userAgent);
