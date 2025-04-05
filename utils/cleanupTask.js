@@ -1,16 +1,16 @@
-const linkModel = require("../models/linkModel");
 const redis = require("../config/db");
+const { calculateExpirationTime } = require("./linkUtils");
 
 async function cleanupExpiredLinks() {
   try {
-    console.log(`[${new Date().toISOString()}] Starting cleanup of expired links...`);
+    console.log(`[${new Date().toISOString()}] Checking for expired links...`);
     const now = new Date();
     
     // Get all keys from Redis
     const keys = await redis.keys('shortId:*');
     console.log(`[${new Date().toISOString()}] Found ${keys.length} links to check`);
     
-    let deletedCount = 0;
+    let expiredCount = 0;
     let checkedCount = 0;
     
     for (const key of keys) {
@@ -20,19 +20,14 @@ async function cleanupExpiredLinks() {
           const link = JSON.parse(data);
           checkedCount++;
           
-          const expirationTime = new Date(link.bookingStartTime);
-          expirationTime.setMonth(expirationTime.getMonth() + 1);
+          const expirationTime = calculateExpirationTime(link);
           
           if (now > expirationTime) {
-            console.log(`[${new Date().toISOString()}] Deleting expired link: ${link.shortId}`);
-            console.log(`- Booking Start Time: ${link.bookingStartTime}`);
+            console.log(`[${new Date().toISOString()}] Found expired link: ${link.shortId}`);
+            console.log(`- ${link.bookingStartTime ? 'Booking Start Time' : 'Creation Time'}: ${link.bookingStartTime || link.createdAt}`);
             console.log(`- Expiration Time: ${expirationTime}`);
             console.log(`- Current Time: ${now}`);
-            
-            // Delete both the shortId and link keys
-            await redis.del(key);
-            await redis.del(`link:${link.longURL}`);
-            deletedCount++;
+            expiredCount++;
           }
         }
       } catch (error) {
@@ -40,10 +35,10 @@ async function cleanupExpiredLinks() {
       }
     }
     
-    if (deletedCount > 0) {
-      console.log(`[${new Date().toISOString()}] Cleanup completed:`);
+    if (expiredCount > 0) {
+      console.log(`[${new Date().toISOString()}] Check completed:`);
       console.log(`- Checked ${checkedCount} links`);
-      console.log(`- Deleted ${deletedCount} expired links`);
+      console.log(`- Found ${expiredCount} expired links (Redis will handle automatic deletion)`);
     }
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in cleanup task:`, error.message);

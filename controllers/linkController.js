@@ -1,5 +1,6 @@
 const linkModel = require("../models/linkModel");
 const redis = require("../config/db");
+const { calculateExpirationTime, getSecondsUntilExpiration } = require("../utils/linkUtils");
 require("dotenv").config();
 
 exports.createShortDeepLink = async (req, res) => {
@@ -39,10 +40,9 @@ exports.createShortDeepLink = async (req, res) => {
     let existingLink = await linkModel.findByLongUrl(longURL);
     if (existingLink) {
       console.log("Existing link found in DB:", existingLink);
-      // Cache in Redis with default expiration if booking time is in the past
-      const expirationTime = new Date(existingLink.bookingStartTime);
-      expirationTime.setMonth(expirationTime.getMonth() + 1);
-      const secondsUntilExpiration = Math.max(3600, Math.floor((expirationTime - new Date()) / 1000));
+      // Cache in Redis with expiration
+      const expirationTime = calculateExpirationTime(existingLink);
+      const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
       
       await redis.set(redisKey, JSON.stringify(existingLink), 'EX', secondsUntilExpiration);
       
@@ -75,12 +75,9 @@ exports.createShortDeepLink = async (req, res) => {
     const newLink = await linkModel.create(newLinkData);
     console.log("New short link created:", newLink);
     
-    // Calculate expiration time (1 month + bookingStartTime)
-    const expirationTime = new Date(newLink.bookingStartTime);
-    expirationTime.setMonth(expirationTime.getMonth() + 1);
-    
-    // Ensure expiration time is at least 1 hour from now
-    const secondsUntilExpiration = Math.max(3600, Math.floor((expirationTime - new Date()) / 1000));
+    // Calculate expiration time and cache in Redis
+    const expirationTime = calculateExpirationTime(newLink);
+    const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
     
     // Cache new link in Redis with expiration
     await redis.set(redisKey, JSON.stringify(newLink), 'EX', secondsUntilExpiration);
@@ -115,12 +112,9 @@ exports.redirectShortLink = async (req, res) => {
       link = await linkModel.findByShortId(shortId);
       if (link) {
         console.log("Found link in DB:", link);
-        // Calculate expiration time (1 month + bookingStartTime)
-        const expirationTime = new Date(link.bookingStartTime);
-        expirationTime.setMonth(expirationTime.getMonth() + 1);
-        
-        // Ensure expiration time is at least 1 hour from now
-        const secondsUntilExpiration = Math.max(3600, Math.floor((expirationTime - new Date()) / 1000));
+        // Calculate expiration time and cache in Redis
+        const expirationTime = calculateExpirationTime(link);
+        const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
         
         // Cache in Redis with expiration
         await redis.set(redisKey, JSON.stringify(link), 'EX', secondsUntilExpiration);
@@ -133,8 +127,7 @@ exports.redirectShortLink = async (req, res) => {
     }
 
     // Check if link has expired
-    const expirationTime = new Date(link.bookingStartTime);
-    expirationTime.setMonth(expirationTime.getMonth() + 1);
+    const expirationTime = calculateExpirationTime(link);
     
     if (new Date() > expirationTime) {
       console.log("Link has expired:", shortId);
