@@ -15,19 +15,20 @@ class LinkModel {
       createdAt: new Date()
     };
 
-    // Calculate expiration and store in Redis
+    // Calculate expiration and store in Redis with TTL
     const expirationTime = calculateExpirationTime(link);
     const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
 
-    // Store in Redis with expiration
+    // Store in Redis with TTL
     await redis.set(`shortId:${shortId}`, JSON.stringify(link), 'EX', secondsUntilExpiration);
     await redis.set(`link:${linkData.longURL}`, JSON.stringify(link), 'EX', secondsUntilExpiration);
 
-    console.log('Stored in Redis:', {
+    console.log('Stored in Redis with TTL:', {
       shortId: shortId,
       longURL: linkData.longURL,
       deepLink: link.deepLink,
-      iosLink: link.iosLink
+      iosLink: link.iosLink,
+      expiresIn: `${secondsUntilExpiration} seconds`
     });
 
     return link;
@@ -36,31 +37,13 @@ class LinkModel {
   async findByShortId(shortId) {
     const data = await redis.get(`shortId:${shortId}`);
     if (!data) return null;
-
-    const link = JSON.parse(data);
-    const expirationTime = calculateExpirationTime(link);
-    
-    if (new Date() > expirationTime) {
-      await this.deleteByShortId(shortId);
-      return null;
-    }
-    
-    return link;
+    return JSON.parse(data);
   }
 
   async findByLongUrl(longURL) {
     const data = await redis.get(`link:${longURL}`);
     if (!data) return null;
-
-    const link = JSON.parse(data);
-    const expirationTime = calculateExpirationTime(link);
-    
-    if (new Date() > expirationTime) {
-      await this.deleteByShortId(link.shortId);
-      return null;
-    }
-    
-    return link;
+    return JSON.parse(data);
   }
 
   async deleteByShortId(shortId) {
