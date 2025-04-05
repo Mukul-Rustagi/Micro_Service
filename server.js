@@ -8,9 +8,6 @@ const fs = require("fs");
 const redis = require("./config/db");
 const linkRoutes = require("./routes/linkRoutes");
 
-// Import cleanup task
-require("./utils/cleanupTask");
-
 const app = express();
 
 // Middleware
