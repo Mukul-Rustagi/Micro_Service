@@ -1,6 +1,5 @@
 const { nanoid } = require("nanoid");
 const redis = require("../config/db");
-const { calculateExpirationTime, getSecondsUntilExpiration } = require("../utils/linkUtils");
 
 class LinkModel {
   async create(linkData) {
@@ -9,26 +8,34 @@ class LinkModel {
       shortId,
       longURL: linkData.longURL,
       userType: linkData.userType,
-      bookingStartTime: new Date(linkData.bookingStartTime),
+      bookingStartTime: linkData.bookingStartTime ? new Date(linkData.bookingStartTime) : null,
       deepLink: linkData.deepLink || null,
       iosLink: linkData.iosLink || null,
       createdAt: new Date()
     };
 
-    // Calculate expiration and store in Redis with TTL
-    const expirationTime = calculateExpirationTime(link);
-    const secondsUntilExpiration = getSecondsUntilExpiration(expirationTime);
+    // Calculate TTL in seconds
+    let ttlSeconds;
+    if (link.bookingStartTime) {
+      // If bookingStartTime exists, expire after 1 day
+      const oneDayInSeconds = 24 * 60 * 60;
+      ttlSeconds = oneDayInSeconds;
+    } else {
+      // If no bookingStartTime, expire after 9 months
+      const nineMonthsInSeconds = 9 * 30 * 24 * 60 * 60;
+      ttlSeconds = nineMonthsInSeconds;
+    }
 
     // Store in Redis with TTL
-    await redis.set(`shortId:${shortId}`, JSON.stringify(link), 'EX', secondsUntilExpiration);
-    await redis.set(`link:${linkData.longURL}`, JSON.stringify(link), 'EX', secondsUntilExpiration);
+    await redis.set(`shortId:${shortId}`, JSON.stringify(link), 'EX', ttlSeconds);
+    await redis.set(`link:${linkData.longURL}`, JSON.stringify(link), 'EX', ttlSeconds);
 
     console.log('Stored in Redis with TTL:', {
       shortId: shortId,
       longURL: linkData.longURL,
       deepLink: link.deepLink,
       iosLink: link.iosLink,
-      expiresIn: `${secondsUntilExpiration} seconds`
+      expiresIn: `${ttlSeconds} seconds (${link.bookingStartTime ? '1 day from booking' : '9 months from creation'})`
     });
 
     return link;
