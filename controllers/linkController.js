@@ -1,34 +1,34 @@
 const linkModel = require("../models/linkModel");
 const redis = require("../config/db");
+const logger = require("../utils/logger");
 require("dotenv").config();
 
 exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null) => {
   try {
-    console.log("\n=== Starting createShortDeepLink ===");
-    console.log("Input parameters:", { longURL, userType, bookingStartTime });
+    logger.info("Starting createShortDeepLink", { longURL, userType, bookingStartTime });
     
     if (!longURL || longURL === "") {
-      console.log("Error: URL is required");
+      logger.error("URL is required");
       throw new Error("URL is required");
     }
 
     // Validate booking time first, before any database operations
     const now = new Date();
-    console.log("Current time:", now.toISOString());
+    logger.debug("Current time", { time: now.toISOString() });
     let bookingTime = null;
     let ttlSeconds;
 
     if (bookingStartTime) {
-      console.log("Processing booking start time:", bookingStartTime);
+      logger.debug("Processing booking start time", { bookingStartTime });
       bookingTime = new Date(bookingStartTime);
       if (isNaN(bookingTime.getTime())) {
-        console.log("Error: Invalid booking start time format");
+        logger.error("Invalid booking start time format");
         throw new Error("Invalid booking start time format");
       }
       
       // If booking time has passed, don't create the link
       if (bookingTime < now) {
-        console.log("Error: Booking time is in the past", {
+        logger.error("Booking time is in the past", {
           bookingTime: bookingTime.toISOString(),
           currentTime: now.toISOString()
         });
@@ -42,7 +42,7 @@ exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null)
 
       // Ensure TTL is positive
       if (ttlSeconds <= 0) {
-        console.log("Error: TTL would be negative", {
+        logger.error("TTL would be negative", {
           ttlSeconds,
           bookingTime: bookingTime.toISOString(),
           currentTime: now.toISOString()
@@ -50,7 +50,7 @@ exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null)
         throw new Error(`Cannot create link - Expiration time would be in the past. Booking time: ${bookingStartTime}, Current time: ${now.toISOString()}`);
       }
 
-      console.log("TTL calculation:", {
+      logger.debug("TTL calculation", {
         bookingTime: bookingTime.toISOString(),
         expirationTime: expirationTime.toISOString(),
         ttlSeconds,
@@ -59,38 +59,38 @@ exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null)
     } else {
       // If no bookingStartTime, expire after 9 months from now
       ttlSeconds = 9 * 30 * 24 * 60 * 60; // 9 months in seconds
-      console.log("No booking time provided, using default 9 months TTL:", ttlSeconds);
+      logger.debug("Using default 9 months TTL", { ttlSeconds });
     }
 
     // Check Redis first
-    console.log("Checking Redis for existing link...");
+    logger.debug("Checking Redis for existing link");
     const redisKey = `link:${longURL}`;
     const cachedLink = await redis.get(redisKey);
     if (cachedLink) {
       const existingLink = JSON.parse(cachedLink);
-      console.log("Existing link found in Redis:", existingLink);
+      logger.info("Existing link found in Redis", { link: existingLink });
       return {
         shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
         deepLink: existingLink.deepLink || null,
         iosLink: existingLink.iosLink || null
       };
     }
-    console.log("No existing link found in Redis");
+    logger.debug("No existing link found in Redis");
 
     // Check database if not in Redis
-    console.log("Checking database for existing link...");
+    logger.debug("Checking database for existing link");
     let existingLink = await linkModel.findByLongUrl(longURL);
     if (existingLink) {
-      console.log("Existing link found in DB:", existingLink);
+      logger.info("Existing link found in DB", { link: existingLink });
       return {
         shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
         deepLink: existingLink.deepLink || null,
         iosLink: existingLink.iosLink || null
       };
     }
-    console.log("No existing link found in DB");
+    logger.debug("No existing link found in DB");
 
-    console.log("Creating new link data...");
+    logger.debug("Creating new link data");
     let newLinkData = {
       longURL,
       userType,
@@ -108,23 +108,16 @@ exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null)
       
       newLinkData.deepLink = deepLink;
       newLinkData.iosLink = deepLink;
-      console.log("Added deep links:", { deepLink, iosLink: deepLink });
+      logger.debug("Added deep links", { deepLink, iosLink: deepLink });
     }
 
-    console.log("Creating new link in database...");
+    logger.debug("Creating new link in database");
     const newLink = await linkModel.create(newLinkData);
     if (!newLink) {
-      console.log("Error: Could not create link");
+      logger.error("Could not create link");
       throw new Error("Could not create link");
     }
-    console.log("New link created successfully:", newLink);
-    
-    // Store in Redis with TTL
-    console.log("Storing in Redis with TTL:", ttlSeconds);
-    const linkData = JSON.stringify(newLink);
-    await redis.set(redisKey, linkData, 'EX', ttlSeconds);
-    await redis.set(`shortId:${newLink.shortId}`, linkData, 'EX', ttlSeconds);
-    console.log("Successfully stored in Redis");
+    logger.info("New link created successfully", { link: newLink });
     
     const expirationDate = new Date(now.getTime() + (ttlSeconds * 1000));
     const response = {
@@ -139,27 +132,23 @@ exports.createShortDeepLink = async (longURL, userType, bookingStartTime = null)
         calculatedFrom: bookingTime ? 'booking start time' : 'creation time'
       }
     };
-    console.log("Returning response:", response);
-    console.log("=== End createShortDeepLink ===\n");
+    logger.info("Returning response", { response });
     return response;
   } catch (error) {
-    console.error("Error in createShortDeepLink:", error.message);
+    logger.error("Error in createShortDeepLink", { error: error.message });
     throw error;
   }
 };
 
-// Route handler that uses the function
 exports.createShortDeepLinkHandler = async (req, res) => {
   try {
-    console.log("\n=== Starting createShortDeepLinkHandler ===");
-    console.log("Request body:", req.body);
+    logger.info("Starting createShortDeepLinkHandler", { body: req.body });
     const { longURL, userType, bookingStartTime } = req.body;
     const result = await exports.createShortDeepLink(longURL, userType, bookingStartTime);
-    console.log("Handler response:", result);
-    console.log("=== End createShortDeepLinkHandler ===\n");
+    logger.info("Handler response", { result });
     return res.json(result);
   } catch (error) {
-    console.error("Error in createShortDeepLinkHandler:", error);
+    logger.error("Error in createShortDeepLinkHandler", { error: error.message });
     return res.status(400).json({ error: error.message });
   }
 };
@@ -168,7 +157,7 @@ exports.redirectShortLink = async (req, res) => {
   try {
     const { shortId } = req.params;
     const userAgent = req.get("User-Agent") || "";
-    console.log("Redirecting shortId:", shortId);
+    logger.info("Redirecting shortId", { shortId, userAgent });
 
     // Check Redis first
     const redisKey = `shortId:${shortId}`;
@@ -177,14 +166,14 @@ exports.redirectShortLink = async (req, res) => {
     
     if (cachedLink) {
       link = JSON.parse(cachedLink);
-      console.log("Found link in Redis:", link);
+      logger.debug("Found link in Redis", { link });
     } else {
       link = await linkModel.findByShortId(shortId);
       if (!link) {
-        console.log("Short link not found:", shortId);
+        logger.warn("Short link not found", { shortId });
         return res.status(404).json({ error: "Short link not found or has expired" });
       }
-      console.log("Found link in DB:", link);
+      logger.debug("Found link in DB", { link });
     }
 
     const isAndroid = /android/i.test(userAgent);
@@ -195,21 +184,21 @@ exports.redirectShortLink = async (req, res) => {
 
     if ((link.userType === "customer" || link.userType === "supplier") && link.deepLink) {
       if (isMobileApp) {
-        console.log("Redirecting to mobile app:", link.deepLink);
+        logger.info("Redirecting to mobile app", { url: link.deepLink });
         return res.redirect(link.deepLink);
       } else if (isIOS && link.iosLink) {
         redirectURL = link.iosLink;
-        console.log("Redirecting to iOS app:", redirectURL);
+        logger.info("Redirecting to iOS app", { url: redirectURL });
       } else if (isAndroid && link.deepLink) {
         redirectURL = link.deepLink;
-        console.log("Redirecting to Android app:", redirectURL);
+        logger.info("Redirecting to Android app", { url: redirectURL });
       }
     }
 
-    console.log("Redirecting to:", redirectURL);
+    logger.info("Redirecting to URL", { url: redirectURL });
     return res.redirect(redirectURL);
   } catch (error) {
-    console.error("Error in redirectShortLink:", error.message);
+    logger.error("Error in redirectShortLink", { error: error.message });
     return res.status(500).json({ error: "Server error" });
   }
 };

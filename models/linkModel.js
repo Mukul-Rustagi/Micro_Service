@@ -1,5 +1,6 @@
 const { nanoid } = require("nanoid");
 const redis = require("../config/db");
+const logger = require("../utils/logger");
 
 class LinkModel {
   async create(linkData) {
@@ -17,11 +18,9 @@ class LinkModel {
     // Calculate TTL in seconds
     let ttlSeconds;
     if (link.bookingStartTime) {
-      // If bookingStartTime exists, expire after 1 day
       const oneDayInSeconds = 24 * 60 * 60;
       ttlSeconds = oneDayInSeconds;
     } else {
-      // If no bookingStartTime, expire after 9 months
       const nineMonthsInSeconds = 9 * 30 * 24 * 60 * 60;
       ttlSeconds = nineMonthsInSeconds;
     }
@@ -30,7 +29,7 @@ class LinkModel {
     await redis.set(`shortId:${shortId}`, JSON.stringify(link), 'EX', ttlSeconds);
     await redis.set(`link:${linkData.longURL}`, JSON.stringify(link), 'EX', ttlSeconds);
 
-    console.log('Stored in Redis with TTL:', {
+    logger.info('Stored link in Redis', {
       shortId: shortId,
       longURL: linkData.longURL,
       deepLink: link.deepLink,
@@ -51,16 +50,6 @@ class LinkModel {
     const data = await redis.get(`link:${longURL}`);
     if (!data) return null;
     return JSON.parse(data);
-  }
-
-  async deleteByShortId(shortId) {
-    const link = await this.findByShortId(shortId);
-    if (link) {
-      await redis.del(`shortId:${shortId}`);
-      await redis.del(`link:${link.longURL}`);
-      console.log(`Deleted link: ${shortId}`);
-    }
-    return link;
   }
 }
 

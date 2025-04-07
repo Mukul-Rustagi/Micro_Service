@@ -7,6 +7,7 @@ const fs = require("fs");
 // FILE IMPORTS
 const redis = require("./config/db");
 const linkRoutes = require("./routes/linkRoutes");
+const logger = require("./utils/logger");
 
 const app = express();
 
@@ -16,11 +17,11 @@ app.use(cors());
 
 // Redis Connection Check
 redis.on("connect", () => {
-  console.log("Connected to Redis");
+  logger.info("Connected to Redis");
 });
 
 redis.on("error", (err) => {
-  console.error("Redis connection error:", err);
+  logger.error("Redis connection error:", { error: err.message });
 });
 
 // Serve static files from .well-known directory
@@ -30,23 +31,24 @@ app.use("/.well-known", express.static(path.join(__dirname, "public/.well-known"
 app.get("/.well-known/apple-app-site-association", (req, res) => {
   const filePath = path.join(__dirname, "public", ".well-known", "apple-app-site-association");
   if (fs.existsSync(filePath)) {
-    res.setHeader("Content-Type", "application/json"); // iOS requires JSON content-type
+    res.setHeader("Content-Type", "application/json");
     res.sendFile(filePath);
   } else {
+    logger.error("apple-app-site-association not found");
     res.status(404).json({ error: "apple-app-site-association not found" });
   }
 });
 
-// Load Routes (Make sure this is after serving static files)
+// Load Routes
 app.use("/", linkRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(`Error: ${err.message}`);
+  logger.error("Internal server error", { error: err.message });
   res.status(500).json({ error: "Internal server error" });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  logger.info(`Server running on port ${PORT}`);
 });
