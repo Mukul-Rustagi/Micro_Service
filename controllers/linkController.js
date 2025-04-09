@@ -178,37 +178,50 @@ exports.redirectShortLink = async (req, res) => {
 
     const isAndroid = /android/i.test(userAgent);
     const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-    const isMobileApp = /RydeuApp|RydeuSupplier/i.test(userAgent);
+    const isMobileApp = /RydeuApp|RydeuSupplier/i.test(userAgent); 
 
-    let redirectURL = link.longURL;
+    let deepLink = link.deepLink;
+    let iosLink = link.iosLink;
+    let webFallback = link.longURL;
 
-    // Modified logic: only use deepLink when opened from app
-    if ((link.userType === "customer" || link.userType === "supplier") && link.deepLink) {
-      if (isMobileApp) {
-        console.log("HI");
-        logger.info("Redirecting to mobile app (deepLink)", { url: link.deepLink });
-        return res.redirect(link.deepLink);
-      } else if (isIOS && link.iosLink) {
-        console.log("HI2");
-        console.log(link.iosLink);
-        redirectURL = link.iosLink;
-        logger.info("Redirecting to iOS browser link", { url: redirectURL });
-      } else if (isAndroid && link.deepLink) {
-        console.log(link.deepLink);
-        console.log("HI7");
-        redirectURL = link.deepLink;
-        logger.info("Redirecting to Android browser link", { url: redirectURL });
-      } else {
-        console.log("HI3");
-        console.log(redirectURL);
-        redirectURL = link.longURL;
-        logger.info("Fallback to long URL", { url: redirectURL });
-      }
+    if (isMobileApp) {
+      return res.redirect(deepLink);
+    } else if (isAndroid) {
+      res.send(`
+        <html>
+        <head>
+          <meta http-equiv="refresh" content="0; url=${deepLink}">
+          <script>
+            setTimeout(function() {
+              window.location.href = "${webFallback}";
+            }, 2500);
+          </script>
+        </head>
+        <body>
+          If the app does not open, <a href="${webFallback}">click here</a>.
+        </body>
+        </html>
+      `);
+    } else if (isIOS) {
+      res.send(`
+        <html>
+        <head>
+          <meta http-equiv="refresh" content="0; url=${iosLink}">
+          <script>
+            setTimeout(function() {
+              window.location.href = "${webFallback}";
+            }, 2500);
+          </script>
+        </head>
+        <body>
+          If the app does not open, <a href="${webFallback}">click here</a>.
+        </body>
+        </html>
+      `);
+    } else {
+      return res.redirect(webFallback);
     }
-
-    logger.info("Redirecting to final URL", { url: redirectURL });
-    return res.redirect(redirectURL);
-  } catch (error) {
+   } catch (error) {
     logger.error("Error in redirectShortLink", { error: error.message });
     return res.status(500).json({ error: "Server error" });
   }
