@@ -182,20 +182,24 @@ exports.redirectShortLink = async (req, res) => {
 
     let redirectURL = link.longURL;
 
+    // Modified logic: only use deepLink when opened from app
     if ((link.userType === "customer" || link.userType === "supplier") && link.deepLink) {
       if (isMobileApp) {
-        logger.info("Redirecting to mobile app", { url: link.deepLink });
+        logger.info("Redirecting to mobile app (deepLink)", { url: link.deepLink });
         return res.redirect(link.deepLink);
       } else if (isIOS && link.iosLink) {
         redirectURL = link.iosLink;
-        logger.info("Redirecting to iOS app", { url: redirectURL });
-      } else if (isAndroid && link.deepLink) {
-        redirectURL = link.deepLink;
-        logger.info("Redirecting to Android app", { url: redirectURL });
+        logger.info("Redirecting to iOS browser link", { url: redirectURL });
+      } else if (isAndroid && link.androidLink) {
+        redirectURL = link.androidLink;
+        logger.info("Redirecting to Android browser link", { url: redirectURL });
+      } else {
+        redirectURL = link.longURL;
+        logger.info("Fallback to long URL", { url: redirectURL });
       }
     }
 
-    logger.info("Redirecting to URL", { url: redirectURL });
+    logger.info("Redirecting to final URL", { url: redirectURL });
     return res.redirect(redirectURL);
   } catch (error) {
     logger.error("Error in redirectShortLink", { error: error.message });
