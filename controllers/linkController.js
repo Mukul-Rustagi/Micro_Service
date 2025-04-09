@@ -193,10 +193,10 @@ exports.redirectShortLink = async (req, res) => {
         console.log(link.iosLink);
         redirectURL = link.iosLink;
         logger.info("Redirecting to iOS browser link", { url: redirectURL });
-      } else if (isAndroid && link.androidLink) {
-        console.log(link.androidLink);
+      } else if (isAndroid && link.deepLink) {
+        console.log(link.deepLink);
         console.log("HI7");
-        redirectURL = link.androidLink;
+        redirectURL = link.deepLink;
         logger.info("Redirecting to Android browser link", { url: redirectURL });
       } else {
         console.log("HI3");
