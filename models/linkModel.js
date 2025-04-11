@@ -2,7 +2,7 @@ const { nanoid } = require("nanoid");
 const redis = require("../config/db");
 const logger = require("../utils/logger");
 
-class LinkModel {
+const linkModel = {
   async create(linkData) {
     const shortId = nanoid(8);
     const link = {
@@ -38,19 +38,19 @@ class LinkModel {
     });
 
     return link;
-  }
+  },
 
   async findByShortId(shortId) {
     const data = await redis.get(`shortId:${shortId}`);
     if (!data) return null;
     return JSON.parse(data);
-  }
+  },
 
   async findByLongUrl(longURL) {
     const data = await redis.get(`link:${longURL}`);
     if (!data) return null;
     return JSON.parse(data);
   }
-}
+};
 
-module.exports = new LinkModel();
+module.exports = linkModel;
