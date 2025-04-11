@@ -2,16 +2,15 @@ const linkModel = require("../models/linkModel");
 const redis = require("../config/db");
 const logger = require("../utils/logger");
 require("dotenv").config();
-const ERROR_CODES = require("../utils/error/errorCodes");
 
 exports.createShortDeepLinkHandler = async (req, res, next) => {
   try {
     const { longURL, userType, bookingStartTime } = req.body;
     logger.info("Starting createShortDeepLink", { longURL, userType, bookingStartTime });
-    
+
     if (!longURL || longURL === "") {
       logger.error("URL is required");
-      return next(ERROR_CODES.VALIDATION_ERROR("URL is required"));
+      return res.status(400).json({ error: "URL is required" });
     }
 
     const now = new Date();
@@ -24,15 +23,15 @@ exports.createShortDeepLinkHandler = async (req, res, next) => {
       bookingTime = new Date(bookingStartTime);
       if (isNaN(bookingTime.getTime())) {
         logger.error("Invalid booking start time format");
-        return next(ERROR_CODES.VALIDATION_ERROR("Invalid booking start time format"));
+        return res.status(400).json({ error: "Invalid booking start time format" });
       }
-      
+
       if (bookingTime < now) {
         logger.error("Booking time is in the past", {
           bookingTime: bookingTime.toISOString(),
           currentTime: now.toISOString()
         });
-        return next(ERROR_CODES.VALIDATION_ERROR(`Cannot create link - Booking start time (${bookingStartTime}) is in the past`));
+        return res.status(400).json({ error: `Cannot create link - Booking start time (${bookingStartTime}) is in the past` });
       }
 
       const expirationTime = new Date(bookingTime);
@@ -45,7 +44,7 @@ exports.createShortDeepLinkHandler = async (req, res, next) => {
           bookingTime: bookingTime.toISOString(),
           currentTime: now.toISOString()
         });
-        return next(ERROR_CODES.VALIDATION_ERROR("Cannot create link - Expiration time would be in the past"));
+        return res.status(400).json({ error: "Cannot create link - Expiration time would be in the past" });
       }
     } else {
       ttlSeconds = 9 * 30 * 24 * 60 * 60; // 9 months
@@ -91,7 +90,7 @@ exports.createShortDeepLinkHandler = async (req, res, next) => {
       let deepLink = userType === "customer"
         ? `rydeu://app/${extractedPath}`
         : `rydeu-supplier://app/${extractedPath}`;
-      
+
       newLinkData.deepLink = deepLink;
       newLinkData.iosLink = deepLink;
       logger.debug("Added deep links", { deepLink, iosLink: deepLink });
@@ -101,7 +100,7 @@ exports.createShortDeepLinkHandler = async (req, res, next) => {
     const newLink = await linkModel.create(newLinkData);
     if (!newLink) {
       logger.error("Could not create link");
-      return next(ERROR_CODES.DATABASE_ERROR("Failed to create link"));
+      throw new Error("Failed to create link");
     }
     logger.info("New link created successfully", { link: newLink });
 
@@ -123,7 +122,7 @@ exports.createShortDeepLinkHandler = async (req, res, next) => {
 
   } catch (error) {
     logger.error("Error in createShortDeepLink", { error: error.message });
-    return next(ERROR_CODES.SERVER_ERROR(error.message));
+    return res.status(500).json({ error: error.message });
   }
 };
 
@@ -136,7 +135,7 @@ exports.redirectShortLink = async (req, res, next) => {
     const redisKey = `shortId:${shortId}`;
     const cachedLink = await redis.get(redisKey);
     let link;
-    
+
     if (cachedLink) {
       link = JSON.parse(cachedLink);
       logger.debug("Found link in Redis", { link });
@@ -144,7 +143,7 @@ exports.redirectShortLink = async (req, res, next) => {
       link = await linkModel.findByShortId(shortId);
       if (!link) {
         logger.warn("Short link not found", { shortId });
-        return next(ERROR_CODES.NOT_FOUND("Short link not found"));
+        return res.status(404).json({ error: "Short link not found" });
       }
       logger.debug("Found link in DB", { link });
     }
@@ -159,7 +158,7 @@ exports.redirectShortLink = async (req, res, next) => {
 
     if (!webFallback) {
       logger.error("Missing required link data", { shortId });
-      return next(ERROR_CODES.SERVER_ERROR("Missing required link data"));
+      return res.status(500).json({ error: "Missing required link data" });
     }
 
     if (isMobileApp && deepLink) {
@@ -192,6 +191,6 @@ exports.redirectShortLink = async (req, res, next) => {
     }
   } catch (error) {
     logger.error("Error in redirectShortLink", { error: error.message });
-    return next(ERROR_CODES.SERVER_ERROR(error.message));
+    return res.status(500).json({ error: error.message });
   }
 };
