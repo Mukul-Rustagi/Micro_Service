@@ -251,7 +251,7 @@ module.exports = {
         return next(ERROR_CODES.SERVER_ERROR("Missing required link data"));
       }
 
-      if (isMobileApp && deepLink) {
+      if (deepLink) {
         logger.info("Redirecting to app", { url: deepLink });
         return res.redirect(deepLink);
       } else if ((isAndroid || isIOS) && (link.userType === "customer" || link.userType === "supplier") && deepLink) {
