@@ -133,7 +133,8 @@ module.exports = {
         createdAt: now
       };
 
-      if (userType === "customer" || userType === "supplier") {
+      // Only create deep links if userType is provided and valid
+      if (userType && (userType === "customer" || userType === "supplier")) {
         try {
           let extractedPath = longURL.split("/").slice(3).join("/");
           let deepLink = userType === "customer"
@@ -147,6 +148,8 @@ module.exports = {
           logger.error("Error creating deep links", { error: error.message });
           // Continue without deep links if creation fails
         }
+      } else {
+        logger.debug("No userType provided, skipping deep link creation");
       }
 
       logger.debug("Creating new link in database");
