@@ -251,32 +251,41 @@ module.exports = {
         return next(ERROR_CODES.SERVER_ERROR("Missing required link data"));
       }
 
-      if (deepLink) {
-        logger.info("Redirecting to app", { url: deepLink });
+      if (isMobileApp) {
         return res.redirect(deepLink);
-      } else if ((isAndroid || isIOS) && (link.userType === "customer" || link.userType === "supplier") && deepLink) {
-        const appUrl = (isIOS && iosLink) ? iosLink : deepLink;
-        logger.info("Sending smart banner with fallback", { appUrl, webFallback });
+      } else if (isAndroid) {
         res.send(`
           <html>
           <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0; url=${deepLink}">
             <script>
-              window.location.href = "${appUrl}";
               setTimeout(function() {
                 window.location.href = "${webFallback}";
-              }, 1500);
+              }, 2500);
             </script>
           </head>
           <body>
-            <h3>Opening Rydeu${link.userType === "supplier" ? " Supplier" : ""}...</h3>
-            <p>If the app doesn't open automatically, please wait or use the link below.</p>
-            <a href="${webFallback}">Continue in browser</a>
+            If the app does not open, <a href="${webFallback}">click here</a>.
+          </body>
+          </html>
+        `);
+      } else if (isIOS) {
+        res.send(`
+          <html>
+          <head>
+            <meta http-equiv="refresh" content="0; url=${iosLink}">
+            <script>
+              setTimeout(function() {
+                window.location.href = "${webFallback}";
+              }, 2500);
+            </script>
+          </head>
+          <body>
+            If the app does not open, <a href="${webFallback}">click here</a>.
           </body>
           </html>
         `);
       } else {
-        logger.info("Redirecting to web URL", { url: webFallback });
         return res.redirect(webFallback);
       }
     } catch (error) {
