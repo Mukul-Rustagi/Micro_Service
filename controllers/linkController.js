@@ -264,7 +264,7 @@ module.exports = {
             <script>
               setTimeout(function() {
                 window.location.href = "${webFallback}";
-              }, 2500);
+              }, 1000);
             </script>
           </head>
           <body>
@@ -280,7 +280,7 @@ module.exports = {
             <script>
               setTimeout(function() {
                 window.location.href = "${webFallback}";
-              }, 2500);
+              }, 1000);
             </script>
           </head>
           <body>
