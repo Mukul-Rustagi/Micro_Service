@@ -88,7 +88,7 @@ module.exports = {
           const existingLink = JSON.parse(cachedLink);
           logger.info("Existing link found in Redis", { link: existingLink });
           return res.json({
-            shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
+            shortURL: `${userType === "organization" ? "https://ride-details.com" : process.env.BASE_URL}/${existingLink.shortId}`,
             deepLink: existingLink.deepLink || null,
             iosLink: existingLink.iosLink || null
           });
@@ -109,7 +109,7 @@ module.exports = {
       if (existingLink) {
         logger.info("Existing link found in DB", { link: existingLink });
         return res.json({
-          shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
+          shortURL: `${userType === "organization" ? "https://ride-details.com" : process.env.BASE_URL}/${existingLink.shortId}`,
           deepLink: existingLink.deepLink || null,
           iosLink: existingLink.iosLink || null
         });
@@ -159,7 +159,7 @@ module.exports = {
 
       const expirationDate = new Date(now.getTime() + (ttlSeconds * 1000));
       const response = {
-        shortURL: `${process.env.BASE_URL}/${newLink.shortId}`,
+        shortURL: `${userType === "organization" ? "https://ride-details.com" : process.env.BASE_URL}/${newLink.shortId}`,
         deepLink: newLink.deepLink || null,
         iosLink: newLink.iosLink || null,
         bookingStartTime: bookingTime ? bookingTime.toISOString() : null,
