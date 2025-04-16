@@ -6,19 +6,24 @@ const ERROR_CODES = require("../utils/error/errorCodes");
 module.exports = {
   createShortDeepLinkHandler: async (req, res, next) => {
     try {
+      // Validate request body exists
       if (!req.body || typeof req.body !== 'object') {
         logger.error("Invalid request body");
         return next(ERROR_CODES.VALIDATION_ERROR("Invalid request body"));
       }
 
+      // Safe destructuring with defaults
       const { longURL = '', userType = '', bookingStartTime = null } = req.body;
+      
       logger.info("Starting createShortDeepLink", { longURL, userType, bookingStartTime });
-
+      
+      // Validate required fields
       if (!longURL || typeof longURL !== 'string' || longURL.trim() === "") {
         logger.error("URL is required and must be a non-empty string");
         return next(ERROR_CODES.VALIDATION_ERROR("URL is required and must be a non-empty string"));
       }
 
+      // Validate URL format
       try {
         new URL(longURL);
       } catch (err) {
@@ -26,7 +31,8 @@ module.exports = {
         return next(ERROR_CODES.VALIDATION_ERROR("Invalid URL format"));
       }
 
-      if (userType && !['customer', 'supplier', 'organization', ''].includes(userType)) {
+      // Validate userType if provided
+      if (userType && !['customer', 'supplier', ''].includes(userType)) {
         logger.error("Invalid userType", { userType });
         return next(ERROR_CODES.VALIDATION_ERROR("Invalid userType"));
       }
@@ -48,7 +54,7 @@ module.exports = {
           logger.error("Error parsing booking start time", { error: error.message });
           return next(ERROR_CODES.VALIDATION_ERROR("Invalid booking start time format"));
         }
-
+        
         if (bookingTime < now) {
           logger.error("Booking time is in the past", {
             bookingTime: bookingTime.toISOString(),
@@ -81,6 +87,7 @@ module.exports = {
         cachedLink = await redis.get(redisKey);
       } catch (error) {
         logger.error("Redis error", { error: error.message });
+        // Continue with database lookup if Redis fails
       }
 
       if (cachedLink) {
@@ -88,12 +95,13 @@ module.exports = {
           const existingLink = JSON.parse(cachedLink);
           logger.info("Existing link found in Redis", { link: existingLink });
           return res.json({
-            shortURL: `${userType === "organization" ? "https://ride-details.com" : process.env.BASE_URL}/${existingLink.shortId}`,
+            shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
             deepLink: existingLink.deepLink || null,
             iosLink: existingLink.iosLink || null
           });
         } catch (error) {
           logger.error("Error parsing Redis cache", { error: error.message });
+          // Continue with database lookup if parsing fails
         }
       }
 
@@ -109,7 +117,7 @@ module.exports = {
       if (existingLink) {
         logger.info("Existing link found in DB", { link: existingLink });
         return res.json({
-          shortURL: `${userType === "organization" ? "https://ride-details.com" : process.env.BASE_URL}/${existingLink.shortId}`,
+          shortURL: `${process.env.BASE_URL}/${existingLink.shortId}`,
           deepLink: existingLink.deepLink || null,
           iosLink: existingLink.iosLink || null
         });
@@ -125,21 +133,23 @@ module.exports = {
         createdAt: now
       };
 
-      if (userType === "customer" || userType === "supplier") {
+      // Only create deep links if userType is provided and valid
+      if (userType && (userType === "customer" || userType === "supplier")) {
         try {
           let extractedPath = longURL.split("/").slice(3).join("/");
           let deepLink = userType === "customer"
             ? `rydeu://app/${extractedPath}`
             : `rydeu-supplier://app/${extractedPath}`;
-
+          
           newLinkData.deepLink = deepLink;
           newLinkData.iosLink = deepLink;
           logger.debug("Added deep links", { deepLink, iosLink: deepLink });
         } catch (error) {
           logger.error("Error creating deep links", { error: error.message });
+          // Continue without deep links if creation fails
         }
-      } else if (userType === "organization" || userType === "") {
-        logger.debug("UserType is organization or empty, skipping deep link creation");
+      } else {
+        logger.debug("No userType provided, skipping deep link creation");
       }
 
       logger.debug("Creating new link in database");
@@ -159,7 +169,7 @@ module.exports = {
 
       const expirationDate = new Date(now.getTime() + (ttlSeconds * 1000));
       const response = {
-        shortURL: `${userType === "organization" ? "https://ride-details.com" : process.env.BASE_URL}/${newLink.shortId}`,
+        shortURL: `${process.env.BASE_URL}/${newLink.shortId}`,
         deepLink: newLink.deepLink || null,
         iosLink: newLink.iosLink || null,
         bookingStartTime: bookingTime ? bookingTime.toISOString() : null,
@@ -181,6 +191,7 @@ module.exports = {
 
   redirectShortLink: async (req, res, next) => {
     try {
+      // Validate request params
       if (!req.params || typeof req.params !== 'object') {
         logger.error("Invalid request parameters");
         return next(ERROR_CODES.VALIDATION_ERROR("Invalid request parameters"));
@@ -201,6 +212,7 @@ module.exports = {
         cachedLink = await redis.get(redisKey);
       } catch (error) {
         logger.error("Redis error", { error: error.message });
+        // Continue with database lookup if Redis fails
       }
 
       let link;
@@ -210,6 +222,7 @@ module.exports = {
           logger.debug("Found link in Redis", { link });
         } catch (error) {
           logger.error("Error parsing Redis cache", { error: error.message });
+          // Continue with database lookup if parsing fails
         }
       }
 
@@ -251,7 +264,7 @@ module.exports = {
             <script>
               setTimeout(function() {
                 window.location.href = "${webFallback}";
-              }, 1000);
+              }, 1500);
             </script>
           </head>
           <body>
@@ -267,7 +280,7 @@ module.exports = {
             <script>
               setTimeout(function() {
                 window.location.href = "${webFallback}";
-              }, 1000);
+              }, 1500);
             </script>
           </head>
           <body>
