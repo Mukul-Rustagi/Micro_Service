@@ -51,7 +51,7 @@ module.exports = {
         }
 
         const expirationTime = new Date(bookingTime);
-        const ttlDays = parseInt(process.env.BOOKING_TTL_DAYS) ;
+        const ttlDays = parseInt(process.env.BOOKING_TTL_DAYS);
         expirationTime.setDate(expirationTime.getDate() + ttlDays);
         ttlSeconds = Math.floor((expirationTime - now) / 1000);
 
@@ -184,12 +184,42 @@ module.exports = {
       if (!link) {
         try {
           link = await linkModel.findByShortId(shortId);
+          if (!link) {
+            return res.status(404).send(`
+              <html>
+              <head>
+                <title>Link Not Found</title>
+                <style>
+                  body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                  h1 { color: #333; }
+                  p { color: #666; }
+                </style>
+              </head>
+              <body>
+                <h1>404 - Link Not Found</h1>
+                <p>The requested link has expired or does not exist.</p>
+              </body>
+              </html>
+            `);
+          }
         } catch (error) {
-          return next(ERROR_CODES.DATABASE_ERROR("Failed to find link"));
-        }
-
-        if (!link) {
-          return next(ERROR_CODES.NOT_FOUND("Short link not found"));
+          logger.error("Database error", { error: error.message });
+          return res.status(404).send(`
+            <html>
+            <head>
+              <title>Link Not Found</title>
+              <style>
+                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                h1 { color: #333; }
+                p { color: #666; }
+              </style>
+            </head>
+            <body>
+              <h1>404 - Link Not Found</h1>
+              <p>The requested link has expired or does not exist.</p>
+            </body>
+            </html>
+          `);
         }
       }
 
@@ -202,7 +232,22 @@ module.exports = {
       let webFallback = link.longURL;
 
       if (!webFallback) {
-        return next(ERROR_CODES.SERVER_ERROR("Missing required link data"));
+        return res.status(404).send(`
+          <html>
+          <head>
+            <title>Link Not Found</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+              h1 { color: #333; }
+              p { color: #666; }
+            </style>
+          </head>
+          <body>
+            <h1>404 - Link Not Found</h1>
+            <p>The requested link has expired or does not exist.</p>
+          </body>
+          </html>
+        `);
       }
 
       if (isMobileApp) {
