@@ -18,7 +18,7 @@ const linkModel = {
     // Calculate TTL in seconds
     let ttlSeconds;
     if (link.bookingStartTime) {
-      const oneDayInSeconds = 24 * 60 * 60;
+      const oneDayInSeconds = 30*24 * 60 * 60;
       ttlSeconds = oneDayInSeconds;
     } else {
       const nineMonthsInSeconds = 9 * 30 * 24 * 60 * 60;
