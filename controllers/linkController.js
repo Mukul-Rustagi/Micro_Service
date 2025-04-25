@@ -51,14 +51,16 @@ module.exports = {
         }
 
         const expirationTime = new Date(bookingTime);
-        expirationTime.setMonth(expirationTime.getMonth() + 1);
+        const ttlDays = parseInt(process.env.BOOKING_TTL_DAYS) ;
+        expirationTime.setDate(expirationTime.getDate() + ttlDays);
         ttlSeconds = Math.floor((expirationTime - now) / 1000);
 
         if (ttlSeconds <= 0) {
           return next(ERROR_CODES.VALIDATION_ERROR("Cannot create link - Expiration time would be in the past"));
         }
       } else {
-        ttlSeconds = 9 * 30 * 24 * 60 * 60; // 9 months
+        const defaultMonths = parseInt(process.env.DEFAULT_TTL_MONTHS);
+        ttlSeconds = defaultMonths * 30 * 24 * 60 * 60;
       }
 
       const redisKey = `link:${longURL}`;
