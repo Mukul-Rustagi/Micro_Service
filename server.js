@@ -49,6 +49,32 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+app.get('/deep-link-handler', (req, res) => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redirecting...</title>
+<script>
+            setTimeout(function () {
+                window.location = "https://staging.rydeu.com/";
+            }, 1500);
+            window.location = "rydeu://app";
+</script>
+</head>
+<body>
+<p>Trying to open the app...</p>
+</body>
+</html>
+    `;
+ 
+    res.status(200).send(htmlContent);
+});
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
 });
+
+ 
+
