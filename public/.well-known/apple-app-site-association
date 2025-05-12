@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "VD43CUW32H.com.rydeu.app",
+          "VD43CUW32H.com.rydeu.driver"
+        ],
+        "components": [
+          {
+            "/": "/app/customer/*",
+            "comment": "For Handle Customer Unv Link"
+          },
+          {
+            "/": "/app/supplier/*",
+            "comment": "For Handle Supplier Unv Link"
+          }
+        ]
+      }
+    ]
+  }
+}
+ 

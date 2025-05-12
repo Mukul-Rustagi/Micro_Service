@@ -1,0 +1,24 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.rydeu.app",
+      "sha256_cert_fingerprints": [
+        "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+        "8E:65:D1:57:3C:17:AB:1B:C9:5E:34:72:5D:33:C3:C8:59:A3:EB:13:CD:8D:DE:F5:6F:62:62:AE:4C:03:EE:03"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.rydeu.driver",
+      "sha256_cert_fingerprints": [
+        "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+        "31:E2:9F:D7:A7:C6:42:E0:D7:F6:B0:DC:63:1E:23:F7:4F:AA:E6:50:60:93:29:2C:CE:2D:6C:90:47:97:0F:7B"
+      ]
+    }
+  }
+]
