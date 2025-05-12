@@ -30,8 +30,10 @@ app.use("/.well-known", express.static(path.join(__dirname, "public/.well-known"
 // Serve apple-app-site-association with correct Content-Type for iOS
 app.get("/.well-known/apple-app-site-association", (req, res) => {
   const filePath = path.join(__dirname, "public", ".well-known", "apple-app-site-association");
+
   if (fs.existsSync(filePath)) {
     res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", "inline"); // Prevent download
     res.sendFile(filePath);
   } else {
     logger.error("apple-app-site-association not found");
